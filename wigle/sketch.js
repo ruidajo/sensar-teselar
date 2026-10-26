@@ -328,12 +328,12 @@ function drawAntennas() {
       circle(x, y, size);
 
       // animacion
-      // crece 60 px y se desvanece
+      // crece N px y se desvanece
       if (r.flash > 0) {
         noFill();
         c.setAlpha(255 * r.flash);
         stroke(c);
-        circle(x, y, size + (1 - r.flash) * 60);
+        circle(x, y, size + (1 - r.flash) * 10);
         r.flash -= 0.02;
       }
     } else {
