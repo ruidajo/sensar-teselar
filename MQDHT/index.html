@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapeo temperatura, humedad y gas</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/addons/p5.sound.min.js"></script>
+</head>
+<body>
+
+  <!-- Leyenda: activa/desactiva cada variable (visual + voz) -->
+  <aside id="legend">
+    <h1>Mapeo de sensores</h1>
+    <div id="legend-items"></div>
+    <div id="audio">Clic para activar el sonido</div>
+    <p class="keys">
+      <b>Espacio</b> play/pausa
+      <b>R</b> Reset <br>
+      <b>M</b> silenciar <b>
+        T</b> modo de tiempo<br>
+      <b>1 2 3</b> variables · <b>Esc</b> deseleccionar<br>
+      Rueda: zoom · arrastrar: mover
+    </p>
+  </aside>
+
+  <!-- Detalle del punto seleccionado -->
+  <aside id="info"></aside>
+
+  <!-- Controles de reproducción -->
+  <footer id="controls">
+    <button id="play" title="Espacio">▶ Play</button>
+    <input id="scrub" type="range" min="0" max="100" value="0" step="1">
+    <span id="time">0.0 / 0.0 s</span>
+    <button id="mode" title="T">Tiempo: constante</button>
+    <label class="speed">Vel.
+      <input id="speed" type="range" min="0.5" max="16" step="0.5" value="4">
+      <span id="speed-val">4×</span>
+    </label>
+    <label class="file">Recargar JSON
+      <input id="file" type="file" accept=".json,application/json">
+    </label>
+  </footer>
+
+  <script src="sketch.js"></script>
+</body>
+</html>

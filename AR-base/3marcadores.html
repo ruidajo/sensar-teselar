@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>3 marcadores AR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.js"></script>
+  <script src="https://tetunori.github.io/p5.simpleAR/dist/v0.7.0/p5SimpleAR.js"></script>
+  <style>
+    /* Oculta el canvas por defecto de p5 SIN usar display:none
+       (display:none hace que offsetWidth/offsetHeight valgan 0 y puede dar width/height = 0). */
+    body > canvas, main > canvas { position: absolute; left: -9999px; }
+  </style>
+</head>
+<body>
+<script>
+// Marcadores: https://tetunori.github.io/p5.simpleAR/markers/<id>wFrame.png
+const ID_A = 1, ID_B = 2, ID_C = 3;
+const S = 240; //  mejor rendimiento en móvil
+let gA, gB, gC;
+
+function setup() {
+  // p5 crea un canvas por defecto de 100x100 que ocultamos con CSS arriba
+
+  gA = createARGraphics(S, S, P2D, { scale: 3, markerId: ID_A });
+  gB = createARGraphics(S, S, P2D, { scale: 3, markerId: ID_B });
+  gC = createARGraphics(S, S, P2D, { scale: 3, markerId: ID_C });
+}
+
+function draw() {
+  drawA(gA);
+  drawB(gB);
+  drawC(gC);
+}
+
+// ---- Marcador 1: círculo orbitando ----
+function drawA(g) {
+  g.background(20, 30, 60);
+  g.noStroke();
+  g.fill(255, 120, 120);
+  const a = frameCount * 0.05;
+  g.circle(S / 2 + cos(a) * 70, S / 2 + sin(a) * 70, 50);
+  g.fill(255);
+  g.textAlign(CENTER, CENTER);
+  g.textSize(18);
+  g.text('Marcador ' + ID_A, S / 2, 20);
+}
+
+// ---- Marcador 2: barras animadas con noise ----
+function drawB(g) {
+  g.background(30, 60, 30);
+  g.noStroke();
+  g.fill(150, 255, 150);
+  const n = 8, w = S / n;
+  for (let i = 0; i < n; i++) {
+    const h = noise(i * 0.4, frameCount * 0.02) * (S - 50);
+    g.rect(i * w + 4, S - h, w - 8, h);
+  }
+  g.fill(255);
+  g.textAlign(CENTER, CENTER);
+  g.textSize(18);
+  g.text('Marcador ' + ID_B, S / 2, 20);
+}
+
+// ---- Marcador 3: lee la pose del marcador y la muestra ----
+function drawC(g) {
+  const p = p5SimpleARGetMarkerProperty(ID_C);
+  g.background(60, 40, 20);
+  g.fill(255);
+  g.noStroke();
+  g.textAlign(CENTER, CENTER);
+  g.textSize(16);
+  g.text('Marcador ' + ID_C, S / 2, 20);
+  g.textSize(14);
+  g.text('visible: ' + p.markerVisible, S / 2, 70);
+  if (p.markerVisible) {
+    // La unidad (rad/grados) depende de angleMode()
+    g.text('rot x: ' + p.rotation.x.toFixed(2), S / 2, 110);
+    g.text('rot y: ' + p.rotation.y.toFixed(2), S / 2, 135);
+    g.text('rot z: ' + p.rotation.z.toFixed(2), S / 2, 160);
+    g.text('pos z: ' + p.position.z.toFixed(1), S / 2, 195);
+  }
+}
+
+// ---- Callbacks: se llaman una vez al aparecer/perderse un marcador ----
+function p5SimpleARMarkerFound(id) { console.log('encontrado', id); }
+function p5SimpleARMarkerLost(id)  { console.log('perdido', id); }
+</script>
+</body>
+</html>
