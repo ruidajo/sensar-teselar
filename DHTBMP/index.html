@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapeo de sensores · GeoJSON</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/addons/p5.sound.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ============ Panel izquierdo: mapas ============ -->
+  <aside id="panel-izq" class="panel">
+    <h1>Mapas</h1>
+
+    <section>
+      <h3>Mapa base</h3>
+      <label class="chk"><input type="checkbox" id="osm-on" checked> OpenStreetMap <kbd>O</kbd></label>
+      <label class="rng">Opacidad
+        <input type="range" id="osm-alpha" min="0" max="100" value="55">
+        <output id="osm-alpha-val">55%</output>
+      </label>
+      <label class="chk"><input type="checkbox" id="trazo-on" checked> Línea del recorrido <kbd>L</kbd></label>
+    </section>
+
+    <section>
+      <h3>Archivos GeoJSON</h3>
+      <div class="row">
+        <button id="add-file" class="primary">＋ Añadir archivo(s)</button>
+        <input type="file" id="file" accept=".geojson,.json,application/geo+json,application/json" multiple hidden>
+      </div>
+      <div class="row">
+        <input type="url" id="url" placeholder="https://…/mapa.geojson">
+        <button id="add-url">Cargar</button>
+      </div>
+      <p class="hint">También puedes arrastrar archivos sobre la ventana.</p>
+      <div id="capas"></div>
+    </section>
+  </aside>
+
+  <!-- ============ Panel derecho: sonido ============ -->
+  <aside id="panel-der" class="panel">
+    <h1>Sonido</h1>
+
+    <section>
+      <label class="campo">Escala
+        <select id="escala"></select>
+      </label>
+      <label class="campo" id="custom-wrap" hidden>Grados (semitonos 0–11)
+        <input type="text" id="custom" value="0, 2, 4, 7, 9">
+      </label>
+      <label class="campo">Tónica
+        <select id="tonica"></select>
+      </label>
+      <div id="escala-notas" class="notas"></div>
+
+      <label class="rng">Transposición
+        <input type="range" id="transp" min="-24" max="24" value="0" step="1">
+        <output id="transp-val">0 st</output>
+      </label>
+      <div class="row">
+        <button id="oct-down">−8va</button>
+        <button id="transp-0">0</button>
+        <button id="oct-up">+8va</button>
+        <button id="probar">♪ Probar</button>
+      </div>
+
+      <label class="rng">Octavas / medición
+        <input type="range" id="octavas" min="1" max="5" value="3" step="1">
+        <output id="octavas-val">3</output>
+      </label>
+      <label class="rng">Volumen
+        <input type="range" id="vol" min="0" max="100" value="80">
+        <output id="vol-val">80%</output>
+      </label>
+      <div class="row">
+        <button id="mute">Silenciar <kbd>M</kbd></button>
+      </div>
+    </section>
+
+    <div id="info"></div>
+  </aside>
+
+  <div id="audio">Clic para activar el sonido</div>
+
+  <!-- ============ Barra inferior: reproducción ============ -->
+  <footer id="transport" class="panel">
+    <button id="play" class="primary">▶ Play</button>
+    <button id="mode">Tiempo: constante</button>
+    <input type="range" id="scrub" min="0" max="1" value="0">
+    <span id="time">0.0 / 0.0 s</span>
+    <label class="mini">Vel
+      <input type="range" id="speed" min="0.5" max="20" step="0.5" value="4">
+      <output id="speed-val">4×</output>
+    </label>
+    <label class="mini">Paso
+      <input type="number" id="step" min="0.05" step="0.05" value="0.5"> s
+    </label>
+  </footer>
+
+  <a id="atrib" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© colaboradores de OpenStreetMap</a>
+
+  <script src="sketch.js"></script>
+</body>
+</html>
