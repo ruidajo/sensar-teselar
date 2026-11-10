@@ -1,5 +1,5 @@
 // Mapeo de sensores en GeoJSON · p5.js
-// - Varios archivos GeoJSON (capas), cada uno activable/desactivable
+// - Varios archivos GeoJSON o CSV de WiGLE (capas), cada uno activable/desactivable
 // - Cada medición numérica (propiedades de los Point) activable por archivo
 // - Mapa base OpenStreetMap (teselas) que se puede poner o quitar
 // - Sonorización: escala, tónica, transposición y octavas configurables
@@ -8,9 +8,12 @@
 const COOLDOWN_MS = 40;                       // evita ráfagas al mover rápido el ratón
 const KMIN = 128, KMAX = 256 * 2 ** 21;       // límites de zoom (px por unidad Mercator)
 const KFIT_MAX = 256 * 2 ** 18;
-const DEFAULT_FILES = ['./data/recorrido-2026-11-07T17-24-28.geojson',
-                       './data/recorrido-2026-11-07T17-23-40.geojson',
-                       './data/recorrido-2026-11-07T17-23-45.geojson'];   // se intenta cargar al inicio
+// Archivos que se cargan al iniciar (carpeta data/). Acepta .geojson, .json y .csv de WiGLE.
+const DEFAULT_FILES = [
+  'data/recorrido-2026-11-06T22-08-33.geojson',
+  'data/recorrido-2026-11-06T21-36-42.geojson'
+  // 'data/WigleWifi_20261107122402.csv'
+];
 
 // propiedades numéricas que NO se tratan como mediciones
 const EXCLUIR = /^(ms|t|time|timestamp|fecha|acc|accuracy|lat|lon|lng|latitude|longitude|alt|altitude|id|index|i)$/i;
@@ -64,27 +67,37 @@ const WAVES = ['sine', 'triangle', 'square', 'sawtooth'];
 const AMPS = { sine: 0.28, triangle: 0.30, square: 0.10, sawtooth: 0.10 };
 const REG = [48, 36, 60, 48, 36, 60, 48, 36];       // registros base (múltiplos de C)
 const COLORES_CAPA = ['#ffffff', '#ffb74d', '#4dd0e1', '#ba68c8', '#aed581', '#f06292'];
+// Mediciones con aspecto propio (tipos de señal de WiGLE; rssi en dBm)
+const PRESETS = {
+  wifi_rssi_dbm: { label: 'WiFi', hex: '#4fc3f7', wave: 'sine',     base: 48, unit: 'dBm' },
+  ble_rssi_dbm:  { label: 'BLE',  hex: '#ffb74d', wave: 'triangle', base: 60, unit: 'dBm' },
+  bt_rssi_dbm:   { label: 'BT',   hex: '#ba68c8', wave: 'square',   base: 36, unit: 'dBm' },
+  lte_rssi_dbm:  { label: 'LTE',  hex: '#81c784', wave: 'sawtooth', base: 48, unit: 'dBm' },
+  gsm_rssi_dbm:  { label: 'GSM',  hex: '#e57373', wave: 'sawtooth', base: 36, unit: 'dBm' }
+};
+const RSSI_RANGO = { min: -115, max: -60 };      // rango fijo de potencia de señal (dBm)
 const medidas = {};
 
 function etiquetaDe(k) {
-  const unidades = new Set(['c', 'pct', 'hpa', 'pa', 'ppm', 'v', 'mv', 'ms', 'raw', 'adc']);
+  const unidades = new Set(['c', 'pct', 'hpa', 'pa', 'ppm', 'v', 'mv', 'ms', 'raw', 'adc', 'dbm']);
   const t = k.split('_').filter((s, i, a) => !(i > 0 && i === a.length - 1 && unidades.has(s.toLowerCase())));
   return t.map((s, i) => (/\d/.test(s) ? s.toUpperCase() : (i === 0 ? s[0].toUpperCase() + s.slice(1) : s))).join(' ');
 }
 function unidadDe(k) {
   const s = k.split('_').pop().toLowerCase();
-  return { c: '°C', pct: '%', hpa: 'hPa', pa: 'Pa', ppm: 'ppm', v: 'V', mv: 'mV', adc: 'ADC' }[s] || '';
+  return { c: '°C', pct: '%', hpa: 'hPa', pa: 'Pa', ppm: 'ppm', v: 'V', mv: 'mV', adc: 'ADC', dbm: 'dBm' }[s] || '';
 }
 function medida(k) {
   if (!medidas[k]) {
     const i = Object.keys(medidas).length;
-    const hex = PALETA[i % PALETA.length];
-    const wave = WAVES[i % WAVES.length];
+    const pr = PRESETS[k] || {};
+    const hex = pr.hex || PALETA[i % PALETA.length];
+    const wave = pr.wave || WAVES[i % WAVES.length];
     medidas[k] = {
-      idx: i, hex, base: REG[i % REG.length],
+      idx: i, hex, base: pr.base !== undefined ? pr.base : REG[i % REG.length],
       son: { ...SON_DEF, custom: [...SON_DEF.custom], wave },
       rgb: [1, 3, 5].map(j => parseInt(hex.slice(j, j + 2), 16)),
-      label: etiquetaDe(k), unit: unidadDe(k)
+      label: pr.label || etiquetaDe(k), unit: pr.unit !== undefined ? pr.unit : unidadDe(k)
     };
     if (SEL === null) SEL = k;
   }
@@ -101,8 +114,7 @@ let capas = [];
 let GB = { minX: 0, minY: 0, maxX: 1, maxY: 1 };        // límites globales (para el paneo)
 let view = { x: 0, y: 0, k: 256 };
 let fitK = 256;
-let T0 = 0;                                              // ms de referencia para tiempo real
-const osm = { on: true, alpha: 0.55 };
+const osm = { on: true, alpha: 0.55, estilo: 'osm' };
 let trazo = true;
 
 let hovered = null, lastHovered = null, selected = null;
@@ -112,7 +124,6 @@ let pulsos = [];
 let steady = true, running = false, playhead = 0, duration = 0, speed = 4, STEP = 0.5;
 
 let audioOn = false, audioStarting = false, muted = false, ultimoDisparo = 0;
-let preview = null;
 let capaId = 0;
 
 // ---------------------------------------------------------------- Mercator
@@ -131,7 +142,7 @@ function setup() {
   conectarUI();
   actualizarAudioUI();
   actualizarEscalaUI();
-  for (const f of DEFAULT_FILES) cargarURL(f, true);
+  for (const f of DEFAULT_FILES) cargarDefecto(f);
 }
 
 // ---------------------------------------------------------------- lectura de GeoJSON
@@ -150,6 +161,45 @@ function aFeatures(json) {
   if (json.type && json.coordinates) return [{ geometry: json, properties: {} }];
   if (typeof json === 'object') return aFeatures(Object.values(json));
   return [];
+}
+
+// CSV de WiGLE -> FeatureCollection de Point.
+// Las columnas se desplazan según el tipo de señal (WIFI vs BLE/LTE/BT), así que no se usa la
+// cabecera: se localiza la fecha (FirstSeen) en cada fila y el resto se cuenta desde ahí.
+function wigleAGeoJSON(texto) {
+  const FECHA = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+  const dividir = l => (l.indexOf('"') < 0 ? l.split(',') : l.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/));
+  const features = [];
+  for (const linea of texto.split(/\r?\n/)) {
+    if (!linea) continue;
+    const f = dividir(linea);
+    const i = f.findIndex(v => FECHA.test(v));
+    if (i < 0 || f.length < i + 11) continue;                 // metadatos / cabecera / fila corta
+    const rssi = parseInt(f[i + 3], 10), lat = parseFloat(f[i + 4]), lon = parseFloat(f[i + 5]);
+    const tipo = (f[i + 10] || '').trim().toUpperCase();
+    const ms = Date.parse(f[i].replace(' ', 'T') + 'Z');       // WiGLE guarda la hora en UTC
+    if (!tipo || !isFinite(rssi) || rssi >= 0 || !isFinite(lat) || !isFinite(lon) || !isFinite(ms)) continue;
+    if (lat === 0 && lon === 0) continue;
+    const props = {
+      t: new Date(ms).toISOString(), ms,
+      ssid: (f[1] || '').replace(/"/g, '').trim(), mac: f[0], tipo,
+      [tipo.toLowerCase() + '_rssi_dbm']: rssi
+    };
+    const acc = parseFloat(f[i + 7]);
+    if (isFinite(acc)) props.acc = acc;
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [lon, lat] }, properties: props });
+  }
+  return features.length ? { type: 'FeatureCollection', features } : null;
+}
+
+// texto de un archivo -> GeoJSON (acepta GeoJSON/JSON y CSV de WiGLE)
+function aJSON(texto, nombre) {
+  if (/\.csv$/i.test(nombre) || /^\s*(WigleWifi|MAC,)/.test(texto)) {
+    const g = wigleAGeoJSON(texto);
+    if (!g) throw new Error('el CSV no tiene filas de WiGLE válidas');
+    return g;
+  }
+  return JSON.parse(texto);
 }
 
 function construirCapa(nombre, json) {
@@ -190,11 +240,17 @@ function construirCapa(nombre, json) {
 
   const keys = [];
   for (const p of pts) for (const k of Object.keys(p.vals)) if (!keys.includes(k)) keys.push(k);
-  const rango = {}, active = {}, invert = {};
+  const rango = {}, active = {}, invert = {}, cuenta = {};
   for (const k of keys) {
     medida(k);
-    const vs = pts.map(p => p.vals[k]).filter(v => v !== undefined);
-    rango[k] = { min: Math.min(...vs), max: Math.max(...vs) };
+    let mn = Infinity, mxv = -Infinity, c = 0;
+    for (const p of pts) {
+      const v = p.vals[k];
+      if (v === undefined) continue;
+      c++; if (v < mn) mn = v; if (v > mxv) mxv = v;
+    }
+    rango[k] = /_dbm$/.test(k) ? { ...RSSI_RANGO } : { min: mn, max: mxv };
+    cuenta[k] = c;
     active[k] = true; invert[k] = false;
   }
 
@@ -205,7 +261,7 @@ function construirCapa(nombre, json) {
 
   const L = {
     id: ++capaId, nombre, visible: true, color: COLORES_CAPA[(capaId - 1) % COLORES_CAPA.length],
-    pts, shapes, keys, rango, active, invert, next: 0, voces: {},
+    pts, shapes, keys, rango, active, invert, cuenta, next: 0, voces: {},
     bounds: { minX, minY, maxX, maxY }, ms0: pts.length && pts[0].ms !== null ? pts[0].ms : null
   };
   pts.forEach(p => p.L = L);
@@ -228,7 +284,7 @@ function recalcN(L) {
 
 // ---------------------------------------------------------------- gestión de capas
 function addCapa(nombre, json) {
-  const L = construirCapa(nombre.replace(/\.(geo)?json$/i, ''), json);
+  const L = construirCapa(nombre.replace(/\.(geojson|json|csv)$/i, ''), json);
   if (!L) { alert(`"${nombre}" no contiene geometrías válidas.`); return null; }
   capas.push(L);
   recalcGlobal();
@@ -255,29 +311,27 @@ function quitarCapa(L) {
 }
 
 function recalcGlobal() {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, t0 = Infinity;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const L of capas) {
     minX = Math.min(minX, L.bounds.minX); maxX = Math.max(maxX, L.bounds.maxX);
     minY = Math.min(minY, L.bounds.minY); maxY = Math.max(maxY, L.bounds.maxY);
-    if (L.ms0 !== null) t0 = Math.min(t0, L.ms0);
   }
   if (capas.length) GB = { minX, minY, maxX, maxY };
-  T0 = isFinite(t0) ? t0 : 0;
 }
 
 async function cargarArchivo(f) {
-  try { addCapa(f.name, JSON.parse(await f.text())); }
+  try { addCapa(f.name, aJSON(await f.text(), f.name)); }
   catch (err) { alert(`No se pudo leer "${f.name}": ${err.message}`); }
 }
 
-async function cargarURL(url, silencioso = false) {
+// archivos por defecto (carpeta data/); si no existen, se ignora en silencio
+async function cargarDefecto(ruta) {
   try {
-    const r = await fetch(url);
+    const r = await fetch(ruta);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    addCapa(decodeURIComponent(url.split('/').pop().split('?')[0]) || 'mapa', await r.json());
-  } catch (err) {
-    if (!silencioso) alert('No se pudo cargar la URL: ' + err.message);
-  }
+    const nombre = decodeURIComponent(ruta.split('/').pop());
+    addCapa(nombre, aJSON(await r.text(), nombre));
+  } catch (err) { console.warn('No se cargó', ruta, err.message); }
 }
 
 // ---------------------------------------------------------------- audio
@@ -303,7 +357,7 @@ function asegurarAudio() {
 
 const panDe = p => ((p.x - GB.minX) / ((GB.maxX - GB.minX) || 1) * 2 - 1) * 0.8;
 
-function tocar(p, conCooldown = false) {
+function tocar(p, conCooldown = false, vistos = null) {
   if (!audioOn || muted || !p || !p.L.visible) return;
   if (conCooldown) {
     const ahora = millis();
@@ -313,6 +367,11 @@ function tocar(p, conCooldown = false) {
   const L = p.L;
   for (const k of L.keys) {
     if (!L.active[k] || p.n[k] === undefined) continue;
+    if (vistos) {                                   // una sola nota por voz y cuadro
+      const id = L.id + '|' + k;
+      if (vistos.has(id)) continue;
+      vistos.add(id);
+    }
     const v = voz(L, k), md = medidas[k];
     v.osc.setType(md.son.wave);
     v.env.setRange(AMPS[md.son.wave] * md.son.vol, 0);
@@ -322,43 +381,16 @@ function tocar(p, conCooldown = false) {
   }
 }
 
-// function probarEscala() {
-//   userStartAudio().then(() => {
-//     audioOn = true; masterVolume(MASTER.vol); actualizarAudioUI();
-//     if (!preview) {
-//       const osc = new p5.Oscillator('triangle');
-//       const env = new p5.Envelope();
-//       env.setADSR(0.01, 0.12, 0.0, 0.1);
-//       env.setRange(0.3, 0);
-//       osc.amp(0); osc.start();
-//       preview = { osc, env };
-//     }
-//     const so = objetivoSon();
-//     const raiz = 60 + so.tonica + so.transp;
-//     const notas = [...gradosEscala(so).map(g => raiz + g), raiz + 12];
-//     notas.forEach((m, i) => setTimeout(() => {
-//       preview.osc.setType(so.wave);
-//       preview.env.setRange(0.3 * so.vol, 0);
-//       preview.osc.freq(midiToFreq(constrain(m, 0, 127)));
-//       preview.env.play(preview.osc);
-//     }, i * 220));
-//   });
-// }
-
 function actualizarAudioUI() {
-  const el = document.getElementById('audio');
-  if (!el) return;
-  el.className = !audioOn ? '' : (muted ? 'mute' : 'on');
-  el.textContent = !audioOn ? 'Clic para activar el sonido'
-                 : muted ? 'Silenciado (M para activar)' : 'Sonido activado';
-  const mb = document.getElementById('mute');
+  const mb = $('mute');
   if (mb) mb.firstChild.textContent = muted ? 'Activar sonido ' : 'Silenciar ';
 }
 
 // ---------------------------------------------------------------- tiempo
+// Tiempo real: relativo al inicio de cada archivo (las sesiones suelen ser de días distintos)
 function timeOf(L, p) {
-  if (steady || p.ms === null) return p.i * STEP;
-  return (p.ms - T0) / 1000;
+  if (steady || p.ms === null || L.ms0 === null) return p.i * STEP;
+  return (p.ms - L.ms0) / 1000;
 }
 
 function actualizarDuracion() {
@@ -434,17 +466,33 @@ function fitView(lista) {
 
 // ---------------------------------------------------------------- teselas OSM
 const tiles = new Map();
-const urlTesela = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+const sub = (x, y, l) => l[(x + y) % l.length];
+const BASES = {
+  osm:      { nombre: 'OpenStreetMap estándar', max: 19, attr: '© colaboradores de OpenStreetMap',
+              url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png` },
+  hot:      { nombre: 'OSM Humanitario (HOT)', max: 19, attr: '© OpenStreetMap · HOT',
+              url: (z, x, y) => `https://${sub(x, y, 'abc')}.tile.openstreetmap.fr/hot/${z}/${x}/${y}.png` },
+  cyclosm:  { nombre: 'CyclOSM (ciclismo)', max: 19, attr: '© OpenStreetMap · CyclOSM',
+              url: (z, x, y) => `https://${sub(x, y, 'abc')}.tile-cyclosm.openstreetmap.fr/cyclosm/${z}/${x}/${y}.png` },
+  topo:     { nombre: 'OpenTopoMap (relieve)', max: 17, attr: '© OpenStreetMap · SRTM · OpenTopoMap',
+              url: (z, x, y) => `https://${sub(x, y, 'abc')}.tile.opentopomap.org/${z}/${x}/${y}.png` },
+  claro:    { nombre: 'CARTO claro (Positron)', max: 19, attr: '© OpenStreetMap · © CARTO',
+              url: (z, x, y) => `https://${sub(x, y, 'abcd')}.basemaps.cartocdn.com/light_all/${z}/${x}/${y}.png` },
+  oscuro:   { nombre: 'CARTO oscuro (Dark Matter)', max: 19, attr: '© OpenStreetMap · © CARTO',
+              url: (z, x, y) => `https://${sub(x, y, 'abcd')}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png` },
+  voyager:  { nombre: 'CARTO Voyager', max: 19, attr: '© OpenStreetMap · © CARTO',
+              url: (z, x, y) => `https://${sub(x, y, 'abcd')}.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png` }
+};
 
 function getTesela(z, x, y, cargar = true) {
-  const id = z + '/' + x + '/' + y;
+  const id = osm.estilo + '/' + z + '/' + x + '/' + y;
   let t = tiles.get(id);
   if (!t && cargar) {
     const img = new Image();
     t = { img, ok: false, used: frameCount };
     img.onload = () => { t.ok = true; };
     img.onerror = () => { t.err = true; };
-    img.src = urlTesela(z, x, y);
+    img.src = BASES[osm.estilo].url(z, x, y);
     tiles.set(id, t);
     if (tiles.size > 500) purgarTeselas();
   }
@@ -460,7 +508,7 @@ function purgarTeselas() {
 function dibujarOSM() {
   if (!osm.on) return;
   const k = view.k;
-  const z = constrain(Math.round(Math.log2(k / 256)), 0, 19);
+  const z = constrain(Math.round(Math.log2(k / 256)), 0, BASES[osm.estilo].max);
   const n = 2 ** z, ts = k / n;
   const x0 = -view.x / k, x1 = (width - view.x) / k, y0 = -view.y / k, y1 = (height - view.y) / k;
   const tx0 = Math.max(0, Math.floor(x0 * n)), tx1 = Math.min(n - 1, Math.floor(x1 * n));
@@ -502,11 +550,17 @@ function draw() {
 
   if (running) {
     playhead += constrain(deltaTime, 0, 100) / 1000 * speed;
+    const lote = [];
     for (const L of capas) {
       while (L.next < L.pts.length && timeOf(L, L.pts[L.next]) <= playhead) {
         const p = L.pts[L.next++];
-        if (L.visible) { tocar(p); pulsos.push({ p, t0: millis() }); }
+        if (L.visible) lote.push(p);
       }
+    }
+    if (lote.length) {
+      const vistos = new Set();
+      for (let i = lote.length - 1; i >= 0; i--) tocar(lote[i], false, vistos);
+      for (const p of lote.slice(-40)) pulsos.push({ p, t0: millis() });
     }
     if (playhead > duration + 1.5) reiniciarReproduccion();   // loop
   }
@@ -547,19 +601,23 @@ const reproduciendo = () => running || playhead > 0;
 
 function dibujarRecorrido(L) {
   if (L.pts.length < 2) return;
-  noFill(); strokeJoin(ROUND); strokeCap(ROUND);
-  strokeWeight(1.5); stroke(255, 40);
-  beginShape();
-  for (const p of L.pts) vertex(sx(p), sy(p));
-  endShape();
+  const ctx = drawingContext;
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1.5;
+  ctx.strokeStyle = L.pts.length > 3000 ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.16)';
+  ctx.beginPath();
+  L.pts.forEach((p, i) => (i ? ctx.lineTo(sx(p), sy(p)) : ctx.moveTo(sx(p), sy(p))));
+  ctx.stroke();
 
-  if (!reproduciendo()) return;
-  stroke(255, 120);
-  beginShape();
-  for (let i = 0; i < L.next; i++) vertex(sx(L.pts[i]), sy(L.pts[i]));
-  const c = posCursor(L);
-  if (c && running) vertex(c.x, c.y);
-  endShape();
+  if (reproduciendo() && L.next > 0) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.47)';
+    ctx.beginPath();
+    for (let i = 0; i < L.next; i++) { const p = L.pts[i]; i ? ctx.lineTo(sx(p), sy(p)) : ctx.moveTo(sx(p), sy(p)); }
+    const c = posCursor(L);
+    if (c && running) ctx.lineTo(c.x, c.y);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function marca(estilo, x, y, n, rgb, activo) {
@@ -577,31 +635,71 @@ function marca(estilo, x, y, n, rgb, activo) {
   }
 }
 
+// ¿el punto tiene alguna medición activa? (archivos sin mediciones: siempre sí)
+const puntoActivo = (L, p) => !L.keys.length || L.keys.some(k => L.active[k] && p.n[k] !== undefined);
+
 function dibujarPuntos(L) {
   const activas = L.keys.filter(k => L.active[k]);
   const rep = reproduciendo();
-  for (const p of L.pts) {
-    const x = sx(p), y = sy(p);
-    if (x < -30 || y < -30 || x > width + 30 || y > height + 30) continue;
-    const activo = p === hovered || p === selected;
-    const pendiente = rep && p.i >= L.next;
 
-    if ((pendiente && !activo) || !activas.length) {
-      noFill(); stroke(255, pendiente ? 40 : 90); strokeWeight(1);
-      circle(x, y, pendiente ? 4 : 5);
-    } else {
-      // de mayor a menor presencia: los discos van al fondo
-      for (const k of activas) {
-        if (p.n[k] === undefined) continue;
-        const m = medidas[k];
-        marca(m.idx % 6, x, y, p.n[k], m.rgb, activo);
+  if (L.pts.length > 3000) {
+    dibujarPuntosRapido(L, activas, rep);
+  } else {
+    for (const p of L.pts) {
+      const x = sx(p), y = sy(p);
+      if (x < -30 || y < -30 || x > width + 30 || y > height + 30) continue;
+      if (L.keys.length && !activas.some(k => p.n[k] !== undefined)) continue;
+      const activo = p === hovered || p === selected;
+      const pendiente = rep && p.i >= L.next;
+
+      if ((pendiente && !activo) || !activas.length) {
+        noFill(); stroke(255, pendiente ? 40 : 90); strokeWeight(1);
+        circle(x, y, pendiente ? 4 : 5);
+      } else {
+        for (const k of activas) {
+          if (p.n[k] === undefined) continue;
+          const m = medidas[k];
+          marca(m.idx % 6, x, y, p.n[k], m.rgb, activo);
+        }
       }
     }
-    if (activo) {
-      noFill(); stroke(255); strokeWeight(1.5);
-      circle(x, y, 32);
-    }
   }
+  for (const p of [hovered, selected]) {
+    if (p && p.L === L) { noFill(); stroke(255); strokeWeight(1.5); circle(sx(p), sy(p), 32); }
+  }
+}
+
+// Archivos grandes (p. ej. WiGLE, miles de filas): discos agrupados por medición en un solo trazo
+function dibujarPuntosRapido(L, activas, rep) {
+  const ctx = drawingContext;
+  const dentro = (x, y) => x > -20 && y > -20 && x < width + 20 && y < height + 20;
+  ctx.save();
+  if (rep) {
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath();
+    for (let i = L.next; i < L.pts.length; i++) {
+      const p = L.pts[i], x = sx(p), y = sy(p);
+      if (dentro(x, y) && puntoActivo(L, p)) ctx.rect(x - 1, y - 1, 2, 2);
+    }
+    ctx.fill();
+  }
+  const fin = rep ? L.next : L.pts.length;
+  for (const k of activas) {
+    const [r, g, b] = medidas[k].rgb;
+    ctx.fillStyle = `rgba(${r},${g},${b},0.5)`;
+    ctx.beginPath();
+    for (let i = 0; i < fin; i++) {
+      const p = L.pts[i], n = p.n[k];
+      if (n === undefined) continue;
+      const x = sx(p), y = sy(p);
+      if (!dentro(x, y)) continue;
+      const rad = 2 + 6 * n;
+      ctx.moveTo(x + rad, y);
+      ctx.arc(x, y, rad, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function dibujarPulsos() {
@@ -609,7 +707,7 @@ function dibujarPulsos() {
   pulsos = pulsos.filter(u => millis() - u.t0 < 450);
   for (const u of pulsos) {
     const L = u.p.L;
-    const k = L.keys.find(key => L.active[key]);
+    const k = L.keys.find(key => L.active[key] && u.p.n[key] !== undefined);
     if (!k) continue;
     const t = (millis() - u.t0) / 450;
     const [r, g, b] = medidas[k].rgb;
@@ -630,6 +728,7 @@ function dibujarCursor(L) {
 function etiqueta(p) {
   const L = p.L;
   const partes = [];
+  if (p.props.ssid) partes.push(p.props.ssid.length > 24 ? p.props.ssid.slice(0, 23) + '…' : p.props.ssid);
   if (p.ms !== null) partes.push(new Date(p.ms).toLocaleTimeString('es-CO'));
   for (const k of L.keys) {
     if (!L.active[k] || p.vals[k] === undefined) continue;
@@ -640,11 +739,10 @@ function etiqueta(p) {
   const txt = partes.join(' · ');
   textSize(12); textAlign(LEFT, CENTER);
   const w = textWidth(txt) + 14;
-    const x = Math.min(sx(p) + 14, width - w - 6);
-    const y = Math.max(sy(p) - 34, 6);
+  const x = Math.min(sx(p) + 14, width - w - 6), y = Math.max(sy(p) - 34, 6);
   noStroke(); fill(10, 13, 20, 235);
   rect(x, y, w, 22, 6);
-  fill(255); text(txt, x, y);
+  fill(255); text(txt, x + 7, y + 11);
 }
 
 function findHover() {
@@ -653,8 +751,11 @@ function findHover() {
   for (const L of capas) {
     if (!L.visible) continue;
     for (const p of L.pts) {
-      const d = dist(mouseX, mouseY, sx(p), sy(p));
-      if (d < 12 && d < dMin) { dMin = d; mejor = p; }
+      const dx = mouseX - sx(p);
+      if (dx > 12 || dx < -12) continue;
+      const dy = mouseY - sy(p);
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < 12 && d < dMin && puntoActivo(L, p)) { dMin = d; mejor = p; }
     }
   }
   return mejor;
@@ -719,6 +820,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function setOSM(v) { osm.on = v; $('osm-on').checked = v; $('atrib').style.display = v ? '' : 'none'; }
+function setEstilo(id) { osm.estilo = id; $('osm-estilo').value = id; $('atrib').textContent = BASES[id].attr; }
 function setTrazo(v) { trazo = v; $('trazo-on').checked = v; }
 
 function crearCard(L) {
@@ -742,7 +844,7 @@ function crearCard(L) {
     fila.className = 'med-row';
     fila.innerHTML = `
       <button class="med"><i style="background:${m.hex}"></i>
-        <span>${esc(m.label)}<small>${fmt(k, r.min)} – ${fmt(k, r.max)} ${esc(m.unit)}</small>
+        <span>${esc(m.label)}<small>${fmt(k, r.min)} – ${fmt(k, r.max)} ${esc(m.unit)}${L.cuenta[k] < L.pts.length ? ' · ' + L.cuenta[k] + ' pts' : ''}</small>
         <small class="sd" data-k="${esc(k)}">${esc(textoSon(m))}</small></span></button>
       <button class="ed" data-k="${esc(k)}" title="Editar el sonido de esta medición">🎚</button>
       <button class="inv" title="Invertir el mapeo a las notas">↕</button>`;
@@ -812,6 +914,8 @@ function mostrarInfo(p) {
     <h2>${esc(L.nombre)} · ${p.i + 1} / ${L.pts.length}</h2>
     <div class="sub">${fecha ? esc(fecha.toLocaleDateString('es-CO') + ' ' + fecha.toLocaleTimeString('es-CO')) : '&nbsp;'}</div>
     <dl>
+      ${p.props.ssid ? `<dt>Red</dt><dd>${esc(p.props.ssid)}</dd>` : ''}
+      ${p.props.tipo ? `<dt>Tipo</dt><dd>${esc(p.props.tipo)}</dd>` : ''}
       <dt>Latitud</dt><dd>${p.lat.toFixed(5)}</dd>
       <dt>Longitud</dt><dd>${p.lon.toFixed(5)}</dd>
       ${filas}
@@ -840,6 +944,9 @@ function actualizarEscalaUI() {
 
 function conectarUI() {
   // --- mapas
+  for (const [id, b] of Object.entries(BASES)) $('osm-estilo').add(new Option(b.nombre, id));
+  $('osm-estilo').onchange = e => { setEstilo(e.target.value); e.target.blur(); };
+  setEstilo(osm.estilo);
   $('osm-on').onchange = e => setOSM(e.target.checked);
   $('osm-alpha').addEventListener('input', e => {
     osm.alpha = +e.target.value / 100;
@@ -853,8 +960,6 @@ function conectarUI() {
     for (const f of e.target.files) await cargarArchivo(f);
     e.target.value = '';
   });
-  // $('add-url').onclick = () => { const u = $('url').value.trim(); if (u) cargarURL(u).then(() => { $('url').value = ''; }); };
-  // $('url').addEventListener('keydown', e => { if (e.key === 'Enter') $('add-url').click(); });
 
   window.addEventListener('dragover', e => e.preventDefault());
   window.addEventListener('drop', async e => {
@@ -880,7 +985,6 @@ function conectarUI() {
   $('oct-down').onclick = e => { const so = objetivoSon(); so.transp = Math.max(-24, so.transp - 12); actualizarEscalaUI(); e.target.blur(); };
   $('oct-up').onclick = e => { const so = objetivoSon(); so.transp = Math.min(24, so.transp + 12); actualizarEscalaUI(); e.target.blur(); };
   $('transp-0').onclick = e => { objetivoSon().transp = 0; actualizarEscalaUI(); e.target.blur(); };
-  //$('probar').onclick = e => { probarEscala(); e.target.blur(); };
   $('octavas').addEventListener('input', e => { objetivoSon().octavas = +e.target.value; actualizarEscalaUI(); });
   $('timbre').onchange = e => { objetivoSon().wave = e.target.value; actualizarEscalaUI(); e.target.blur(); };
   $('nivel').addEventListener('input', e => { objetivoSon().vol = +e.target.value / 100; actualizarEscalaUI(); });
@@ -902,9 +1006,14 @@ function conectarUI() {
   $('play').onclick = e => { togglePlay(); e.target.blur(); };
   $('mode').onclick = e => { toggleModo(); e.target.blur(); };
   $('scrub').addEventListener('input', e => { irA(+e.target.value / 100); sincronizarUI(false); });
-  $('speed').addEventListener('input', e => { speed = +e.target.value; $('speed-val').textContent = speed + '×'; });
+  // velocidad exponencial: 0.5× … 300×
+  $('speed').addEventListener('input', e => {
+    speed = +(0.5 * Math.pow(600, +e.target.value / 100)).toPrecision(2);
+    $('speed-val').textContent = speed + '×';
+  });
+  $('speed').dispatchEvent(new Event('input'));
   $('step').addEventListener('change', e => {
-    STEP = Math.max(0.05, +e.target.value || 0.5);
+    STEP = Math.max(0.01, +e.target.value || 0.5);
     e.target.value = STEP;
     actualizarDuracion(); reiniciarReproduccion(); sincronizarUI();
   });

@@ -16,7 +16,10 @@
 
     <section>
       <h3>Mapa base</h3>
-      <label class="chk"><input type="checkbox" id="osm-on" checked> OpenStreetMap <kbd>O</kbd></label>
+      <label class="chk"><input type="checkbox" id="osm-on" checked> Mostrar mapa base <kbd>O</kbd></label>
+      <label class="campo">Estilo
+        <select id="osm-estilo"></select>
+      </label>
       <label class="rng">Opacidad
         <input type="range" id="osm-alpha" min="0" max="100" value="55">
         <output id="osm-alpha-val">55%</output>
@@ -27,10 +30,9 @@
     <section>
       <h3>Archivos GeoJSON</h3>
       <div class="row">
-        <button id="add-file" class="primary">＋ Añadir archivo(s)</button>
-        <input type="file" id="file" accept=".geojson,.json,application/geo+json,application/json" multiple hidden>
+        <button id="add-file" class="primary">＋ Añadir GeoJSON / CSV WiGLE</button>
+        <input type="file" id="file" accept=".geojson,.json,.csv,text/csv,application/geo+json,application/json" multiple hidden>
       </div>
-
       <div id="capas"></div>
     </section>
   </aside>
@@ -102,15 +104,15 @@
     <input type="range" id="scrub" min="0" max="1" value="0">
     <span id="time">0.0 / 0.0 s</span>
     <label class="mini">Vel
-      <input type="range" id="speed" min="0.5" max="20" step="0.5" value="4">
+      <input type="range" id="speed" min="0" max="100" step="1" value="33">
       <output id="speed-val">4×</output>
     </label>
     <label class="mini">Paso
-      <input type="number" id="step" min="0.05" step="0.05" value="0.5"> s
+      <input type="number" id="step" min="0.01" step="0.01" value="0.5"> s
     </label>
   </footer>
 
-  <a id="atrib" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© colaboradores de OpenStreetMap</a>
+  <a id="atrib" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"></a>
 
   <script src="sketch.js"></script>
 </body>

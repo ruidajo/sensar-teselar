@@ -43,7 +43,6 @@ input[type=range] { accent-color: var(--acento); }
 .row { display: flex; gap: 6px; margin: 6px 0; }
 .row > button { flex: 1; }
 .row > input { flex: 1; }
-.row > button#add-url { flex: 0 0 auto; }
 
 .chk { display: flex; align-items: center; gap: 7px; margin: 5px 0; cursor: pointer; }
 .rng { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 8px 0; }
@@ -85,15 +84,6 @@ kbd { font: 10.5px ui-monospace, monospace; padding: 0 5px; border: 1px solid va
 #info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; }
 #info dt { color: var(--tenue); }
 #info dd { margin: 0; font-variant-numeric: tabular-nums; }
-
-/* ---- estado del audio ---- */
-#audio {
-  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
-  padding: 5px 14px; border-radius: 999px; font-size: 12px;
-  background: rgba(255,171,64,.18); border: 1px solid rgba(255,171,64,.5);
-}
-#audio.on { background: rgba(165,214,167,.15); border-color: rgba(165,214,167,.5); }
-#audio.mute { background: rgba(255,255,255,.08); border-color: var(--borde); color: var(--tenue); }
 
 /* ---- transporte ---- */
 #transport {
