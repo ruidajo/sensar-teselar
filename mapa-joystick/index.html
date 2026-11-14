@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SENSAR/TESELAR</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/p5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.4/addons/p5.sound.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-tab="izq">
+
+  <header id="cabecera" class="panel">
+    <div class="fila">
+      <details id="titulo">
+        <summary>SENSAR/TESELAR</summary>
+        <div class="cuerpo">
+          <p>Laboratorio de contra-mapeo.</p>
+        </div>
+      </details>
+      <button id="vista" title="Cambiar entre vista horizontal y vertical (V)">Horizontal</button>
+      <button id="joy" title="Conectar el joystick de la ESP32 por USB (Web Serial)">🎮 Joystick</button>
+    </div>
+    <!--
+    <details id="creditos">
+      <summary>Créditos / autores</summary>
+      <div class="cuerpo">
+        <p><strong>Autoría:</strong> [nombre(s) del equipo]</p>
+        <p><strong>Datos:</strong> recorridos GeoJSON · escaneos WiGLE</p>
+        <p><strong>Software:</strong> p5.js · p5.sound</p>
+        <p><strong>Mapas:</strong> © colaboradores de OpenStreetMap; teselas de CARTO, CyclOSM, OpenTopoMap y HOT según el estilo.</p>
+      </div>
+    </details>
+      -->
+  </header>
+
+  <!-- Pestañas (solo en vista vertical) -->
+  <nav id="tabs">
+    <button data-tab="izq" class="on">Mapas</button>
+    <button data-tab="der">Sonido</button>
+  </nav>
+
+  <!-- ============ Panel izquierdo: mapas ============ -->
+  <aside id="panel-izq" class="panel">
+    <h1>Mapas</h1>
+
+    <section>
+      <h3>Mapa base</h3>
+      <label class="chk"><input type="checkbox" id="osm-on" checked> Mostrar mapa base <kbd>O</kbd></label>
+      <label class="campo">Estilo
+        <select id="osm-estilo"></select>
+      </label>
+      <label class="rng">Opacidad
+        <input type="range" id="osm-alpha" min="0" max="100" value="55">
+        <output id="osm-alpha-val">55%</output>
+      </label>
+      <label class="chk"><input type="checkbox" id="trazo-on" checked> Línea del recorrido <kbd>L</kbd></label>
+    </section>
+
+    <section>
+      <h3>Archivos GeoJSON</h3>
+      <div class="row">
+        <button id="add-file" class="primary">＋ Añadir GeoJSON / CSV WiGLE</button>
+        <input type="file" id="file" accept=".geojson,.json,.csv,text/csv,application/geo+json,application/json" multiple hidden>
+      </div>
+      <div id="capas"></div>
+    </section>
+  </aside>
+
+  <!-- ============ Panel derecho: sonido ============ -->
+  <aside id="panel-der" class="panel">
+    <h1>Sonido</h1>
+
+    <section>
+      <h3>Medición a editar</h3>
+      <div id="chips" class="chips"></div>
+      <p id="med-titulo" class="hint"></p>
+
+      <label class="campo">Escala
+        <select id="escala"></select>
+      </label>
+      <label class="campo" id="custom-wrap" hidden>Grados (semitonos 0–11)
+        <input type="text" id="custom" value="0, 2, 4, 7, 9">
+      </label>
+      <label class="campo">Tónica
+        <select id="tonica"></select>
+      </label>
+      <div id="escala-notas" class="notas"></div>
+
+      <label class="rng">Transposición
+        <input type="range" id="transp" min="-24" max="24" value="0" step="1">
+        <output id="transp-val">0 st</output>
+      </label>
+      <div class="row">
+        <button id="oct-down">−8va</button>
+        <button id="transp-0">0</button>
+        <button id="oct-up">+8va</button>
+      </div>
+
+      <label class="rng">Octavas
+        <input type="range" id="octavas" min="1" max="5" value="3" step="1">
+        <output id="octavas-val">3</output>
+      </label>
+      <label class="campo">Timbre
+        <select id="timbre"></select>
+      </label>
+      <label class="rng">Nivel
+        <input type="range" id="nivel" min="0" max="100" value="100">
+        <output id="nivel-val">100%</output>
+      </label>
+      <div class="row">
+        <button id="aplicar-todas" title="Copia escala, tónica, transposición y octavas a todas las mediciones">Copiar escala a todas</button>
+      </div>
+    </section>
+
+    <section>
+      <h3>General</h3>
+      <label class="rng">Volumen general
+        <input type="range" id="vol" min="0" max="100" value="80">
+        <output id="vol-val">80%</output>
+      </label>
+      <div class="row">
+        <button id="mute">Silenciar <kbd>M</kbd></button>
+      </div>
+    </section>
+
+    <div id="info"></div>
+  </aside>
+
+  <!-- ============ Barra inferior: reproducción ============ -->
+  <footer id="transport" class="panel">
+    <button id="play" class="primary">▶ Play</button>
+    <button id="mode">Tiempo: constante</button>
+    <input type="range" id="scrub" min="0" max="1" value="0">
+    <span id="time">0.0 / 0.0 s</span>
+    <label class="mini">Vel
+      <input type="range" id="speed" min="0" max="100" step="1" value="33">
+      <output id="speed-val">4×</output>
+    </label>
+    <label class="mini">Paso
+      <input type="number" id="step" min="0.01" step="0.01" value="0.5"> s
+    </label>
+  </footer>
+
+  <a id="atrib" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener"></a>
+
+  <script src="sketch.js"></script>
+</body>
+</html>

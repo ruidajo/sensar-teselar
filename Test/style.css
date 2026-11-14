@@ -43,7 +43,6 @@ input[type=range] { accent-color: var(--acento); }
 .row { display: flex; gap: 6px; margin: 6px 0; }
 .row > button { flex: 1; }
 .row > input { flex: 1; }
-.row > button#add-url { flex: 0 0 auto; }
 
 .chk { display: flex; align-items: center; gap: 7px; margin: 5px 0; cursor: pointer; }
 .rng { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 8px 0; }
@@ -86,15 +85,6 @@ kbd { font: 10.5px ui-monospace, monospace; padding: 0 5px; border: 1px solid va
 #info dt { color: var(--tenue); }
 #info dd { margin: 0; font-variant-numeric: tabular-nums; }
 
-/* ---- estado del audio ---- */
-#audio {
-  position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10;
-  padding: 5px 14px; border-radius: 999px; font-size: 12px;
-  background: rgba(255,171,64,.18); border: 1px solid rgba(255,171,64,.5);
-}
-#audio.on { background: rgba(165,214,167,.15); border-color: rgba(165,214,167,.5); }
-#audio.mute { background: rgba(255,255,255,.08); border-color: var(--borde); color: var(--tenue); }
-
 /* ---- transporte ---- */
 #transport {
   left: 296px; right: 296px; bottom: 34px; display: flex; align-items: center; gap: 12px; padding: 9px 14px;
@@ -111,13 +101,63 @@ kbd { font: 10.5px ui-monospace, monospace; padding: 0 5px; border: 1px solid va
 }
 #atrib:hover { color: var(--txt); }
 
-@media (max-width: 1000px) {
-  #transport { left: 12px; right: 12px; bottom: 34px; flex-wrap: wrap; }
-  #panel-izq, #panel-der { bottom: 130px; width: 220px; }
-}
 
 /* ---- selector de medición (panel de sonido) ---- */
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip { display: flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; font-size: 12px; }
 .chip i { width: 9px; height: 9px; border-radius: 50%; }
 .chip.sel { background: rgba(79,195,247,.22); border-color: rgba(79,195,247,.6); }
+
+/* ---- cabecera: título y créditos colapsables ---- */
+#cabecera {
+  top: 12px; left: 50%; transform: translateX(-50%);
+  width: min(380px, calc(100vw - 640px)); min-width: 250px; padding: 8px 12px;
+}
+#cabecera .fila { display: flex; align-items: flex-start; gap: 8px; }
+#cabecera .fila details { flex: 1; min-width: 0; }
+#cabecera #vista { flex: none; white-space: nowrap; }
+#cabecera details + details, #cabecera .fila + details { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--borde); }
+details summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center; gap: 7px;
+  user-select: none; outline-offset: 3px;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: '▸'; color: var(--tenue); transition: transform .15s; }
+details[open] summary::before { transform: rotate(90deg); }
+#titulo summary { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+#creditos summary { color: var(--tenue); font-size: 12px; }
+details .cuerpo { margin: 6px 0 2px 16px; color: var(--tenue); font-size: 12px; }
+details .cuerpo p { margin: 4px 0; }
+details .cuerpo strong { color: var(--txt); font-weight: 600; }
+
+/* ---- pestañas (vista vertical) ---- */
+#tabs { display: none; }
+
+/* ============ VISTA VERTICAL ============ */
+body.vertical { --dock-h: 38vh; --dock-b: 34px; --tabs-h: 32px; }
+
+.vertical #cabecera {
+  top: 8px; left: 8px; right: 8px; transform: none; width: auto; min-width: 0;
+}
+.vertical #panel-izq, .vertical #panel-der {
+  top: auto; bottom: var(--dock-b); left: 8px; right: 8px; width: auto; height: var(--dock-h);
+}
+.vertical[data-tab="izq"] #panel-der { display: none; }
+.vertical[data-tab="der"] #panel-izq { display: none; }
+
+.vertical #tabs {
+  display: flex; gap: 6px; position: fixed; z-index: 10; left: 8px; right: 8px;
+  bottom: calc(var(--dock-b) + var(--dock-h) + 6px); height: var(--tabs-h);
+}
+.vertical #tabs button { flex: 1; border-radius: 8px; }
+.vertical #tabs button.on { background: rgba(79,195,247,.22); border-color: rgba(79,195,247,.6); }
+
+.vertical #transport {
+  left: 8px; right: 8px; bottom: calc(var(--dock-b) + var(--dock-h) + var(--tabs-h) + 12px);
+  flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px;
+}
+.vertical #transport #play { order: 1; }
+.vertical #transport #mode { order: 2; }
+.vertical #transport #time { order: 3; margin-left: auto; min-width: 0; }
+.vertical #transport .mini { order: 4; }
+.vertical #transport #scrub { order: 5; flex: 1 0 100%; }
