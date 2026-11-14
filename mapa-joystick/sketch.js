@@ -10,9 +10,10 @@ const KMIN = 128, KMAX = 256 * 2 ** 21;       // límites de zoom (px por unidad
 const KFIT_MAX = 256 * 2 ** 18;
 // Archivos que se cargan al iniciar (carpeta data/). Acepta .geojson, .json y .csv de WiGLE.
 const DEFAULT_FILES = [
-  'data/recorrido-2026-11-06T22-08-33.geojson',
-  'data/recorrido-2026-11-06T21-36-42.geojson'
-  // 'data/WigleWifi_20261107122402.csv'
+    'data/recorrido-2026-11-07T17-23-40.geojson',
+    'data/recorrido-2026-11-07T17-23-45.geojson',
+    'data/recorrido-2026-11-07T17-24-28.geojson',
+    'data/WigleWifi_20261107122402.csv'
 ];
 
 // propiedades numéricas que NO se tratan como mediciones
